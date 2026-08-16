@@ -39,17 +39,17 @@ function Label({ n, word }: { n: string; word: string }) {
   return <div className="section-label"><span>{n}</span><strong>{word}</strong></div>;
 }
 
-const SUBMIT_EMAIL = "archive@seconddraft.example";
+const SUBMIT_EMAIL = "creativeseconddraft69@proton.me";
 
 function SubmitForm() {
   const [form, setForm] = useState({ name: "", email: "", title: "", link: "", story: "" });
-  const [status, setStatus] = useState<"idle" | "sent" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error" | "network-error">("idle");
 
   const update = (field: keyof typeof form) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!form.name.trim() || !form.email.trim() || !form.title.trim() || !form.story.trim()) {
@@ -57,26 +57,50 @@ function SubmitForm() {
       return;
     }
 
-    const subject = `Invention submission: ${form.title}`;
-    const body =
-      `Name: ${form.name}\n` +
-      `Email: ${form.email}\n` +
-      `Invention: ${form.title}\n` +
-      (form.link ? `Link: ${form.link}\n` : "") +
-      `\nWhat happened:\n${form.story}`;
+    setStatus("sending");
 
-    const mailto = `mailto:${SUBMIT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
-    setStatus("sent");
+    try {
+      const res = await fetch(`https://formsubmit.co/ajax/${SUBMIT_EMAIL}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          _subject: `Invention submission: ${form.title}`,
+          _template: "table",
+          _captcha: "false",
+          name: form.name,
+          email: form.email,
+          invention: form.title,
+          link: form.link || "—",
+          story: form.story,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Request failed");
+      setStatus("sent");
+    } catch {
+      setStatus("network-error");
+    }
   };
 
   if (status === "sent") {
     return (
       <div className="submit-confirm">
-        <span className="case-kicker">SUBMISSION READY</span>
-        <p>Your email client should be open with everything filled in — just hit send. If nothing opened, email us directly at <a href={`mailto:${SUBMIT_EMAIL}`}>{SUBMIT_EMAIL}</a>.</p>
+        <span className="case-kicker">SUBMISSION SENT</span>
+        <p>Your invention landed in our inbox. We read every one.</p>
         <button className="dark-button" type="button" onClick={() => { setForm({ name: "", email: "", title: "", link: "", story: "" }); setStatus("idle"); }}>
           submit another <ArrowUpRight size={15} />
+        </button>
+      </div>
+    );
+  }
+
+  if (status === "network-error") {
+    return (
+      <div className="submit-confirm">
+        <span className="case-kicker">SOMETHING WENT WRONG</span>
+        <p>We couldn't send that automatically. Email us directly at <a href={`mailto:${SUBMIT_EMAIL}`}>{SUBMIT_EMAIL}</a> instead, or try again.</p>
+        <button className="dark-button" type="button" onClick={() => setStatus("idle")}>
+          try again <ArrowUpRight size={15} />
         </button>
       </div>
     );
@@ -107,8 +131,8 @@ function SubmitForm() {
         <textarea rows={4} value={form.story} onChange={update("story")} placeholder="What you built, what went wrong, and why it still deserves another version." />
       </label>
       {status === "error" && <p className="submit-error">Fill in your name, email, invention name and story before sending.</p>}
-      <button className="dark-button" type="submit">
-        submit your invention <ArrowUpRight size={15} />
+      <button className="dark-button" type="submit" disabled={status === "sending"}>
+        {status === "sending" ? "sending..." : <>submit your invention <ArrowUpRight size={15} /></>}
       </button>
     </form>
   );
