@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Second Draft | What if failure wasn't the end?",
+  title: "Second Draft",
   description: "Second Draft turns abandoned inventions into starting points."
 };
 
