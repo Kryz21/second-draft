@@ -39,7 +39,7 @@ function Label({ n, word }: { n: string; word: string }) {
   return <div className="section-label"><span>{n}</span><strong>{word}</strong></div>;
 }
 
-const SUBMIT_EMAIL = "archive@seconddraft.example";
+const SUBMIT_EMAIL = "creativeseconddraft69@proton.me";
 
 function SubmitForm() {
   const [form, setForm] = useState({ name: "", email: "", title: "", link: "", story: "" });
