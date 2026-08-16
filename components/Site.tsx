@@ -111,16 +111,16 @@ function SubmitForm() {
       <div className="submit-row">
         <label>
           <span>your name</span>
-          <input type="text" value={form.name} onChange={update("name")} placeholder="Jane Doe" />
+          <input type="text" value={form.name} onChange={update("name")} placeholder="Micheal Ross" />
         </label>
         <label>
           <span>your email</span>
-          <input type="email" value={form.email} onChange={update("email")} placeholder="jane@example.com" />
+          <input type="email" value={form.email} onChange={update("email")} placeholder="mikeross@abc.com" />
         </label>
       </div>
       <label>
         <span>invention name</span>
-        <input type="text" value={form.title} onChange={update("title")} placeholder="Self-heating mug" />
+        <input type="text" value={form.title} onChange={update("title")} placeholder="idea name" />
       </label>
       <label>
         <span>link (optional)</span>
