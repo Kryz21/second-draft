@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
-import { ArrowDown, ArrowRight, ArrowUpRight, Scan, Wrench, Archive, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Scan, Wrench, Archive, Zap, Menu, X } from "lucide-react";
 import Scene from "./Scene";
 import { TextHoverEffect } from "./ui/text-hover-effect";
 
@@ -39,7 +39,7 @@ function Label({ n, word }: { n: string; word: string }) {
   return <div className="section-label"><span>{n}</span><strong>{word}</strong></div>;
 }
 
-const SUBMIT_EMAIL = "creativeseconddraft69@proton.me";
+const SUBMIT_EMAIL = "archive@seconddraft.example";
 
 function SubmitForm() {
   const [form, setForm] = useState({ name: "", email: "", title: "", link: "", story: "" });
@@ -118,6 +118,7 @@ export default function Site() {
   const main = useRef<HTMLElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const lenis = new Lenis({
@@ -159,6 +160,7 @@ export default function Site() {
       if (!target) return;
 
       event.preventDefault();
+      setMenuOpen(false);
       scrollTo(href);
       window.history.replaceState(null, "", href);
     };
@@ -347,8 +349,20 @@ export default function Site() {
 
       <nav className="nav">
         <a href="#top" className="brand"><span>second</span><span>draft</span></a>
-        <div className="nav-links"><a href="#problem">problem</a><a href="#process">process</a><a href="#archive">archive</a><a href="#case">case</a></div>
+        <div className={`nav-links${menuOpen ? " open" : ""}`}>
+          <a href="#problem">problem</a><a href="#process">process</a><a href="#archive">archive</a><a href="#case">case</a>
+          <a href="#submit" className="nav-cta-mobile">submit <ArrowUpRight size={13}/></a>
+        </div>
         <a href="#submit" className="nav-cta">submit <ArrowUpRight size={13}/></a>
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          {menuOpen ? <X size={20}/> : <Menu size={20}/>}
+        </button>
       </nav>
 
       <section className="hero" id="top">
