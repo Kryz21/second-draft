@@ -400,6 +400,7 @@ main { position: relative; }
 .submit-form input::placeholder, .submit-form textarea::placeholder { color: #a19d95; }
 .submit-error { font-size: 13px; color: var(--red); font-weight: 600; }
 .submit-form .dark-button { align-self: flex-start; margin-top: 4px; }
+.submit-form .dark-button:disabled { opacity: .6; cursor: not-allowed; transform: none; }
 .submit-confirm { margin-top: 40px; max-width: 480px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
 .submit-confirm p { font-size: 15px; line-height: 1.45; }
 .submit-confirm a { color: var(--red); text-decoration: underline; }
