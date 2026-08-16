@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@vercel/kv": "^3,0.0"
+    "@vercel/kv": "^3.0.0",
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.3.0",
     "class-variance-authority": "^0.7.1",
