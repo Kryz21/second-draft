@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
+import { createClient } from "@vercel/kv";
 
 export const dynamic = "force-dynamic";
+
+// The Vercel/Upstash Redis integration was connected with a "STORAGE"
+// custom prefix, so the env vars come through as STORAGE_KV_REST_API_URL /
+// STORAGE_KV_REST_API_TOKEN instead of the default KV_REST_API_URL /
+// KV_REST_API_TOKEN. We build the client manually to point at those.
+const kv = createClient({
+  url: process.env.STORAGE_KV_REST_API_URL!,
+  token: process.env.STORAGE_KV_REST_API_TOKEN!,
+});
 
 const LIST_KEY = "second-draft:submissions";
 
