@@ -60,22 +60,14 @@ function SubmitForm() {
     setStatus("sending");
 
     try {
-      const res = await fetch(`https://formsubmit.co/ajax/${SUBMIT_EMAIL}`, {
+      const res = await fetch("/api/submissions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          _subject: `Invention submission: ${form.title}`,
-          _template: "table",
-          _captcha: "false",
-          name: form.name,
-          email: form.email,
-          invention: form.title,
-          link: form.link || "—",
-          story: form.story,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
       });
 
-      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Request failed");
       setStatus("sent");
     } catch {
       setStatus("network-error");
@@ -111,16 +103,16 @@ function SubmitForm() {
       <div className="submit-row">
         <label>
           <span>your name</span>
-          <input type="text" value={form.name} onChange={update("name")} placeholder="Micheal Ross" />
+          <input type="text" value={form.name} onChange={update("name")} placeholder="Jane Doe" />
         </label>
         <label>
           <span>your email</span>
-          <input type="email" value={form.email} onChange={update("email")} placeholder="mikeross@abc.com" />
+          <input type="email" value={form.email} onChange={update("email")} placeholder="jane@example.com" />
         </label>
       </div>
       <label>
         <span>invention name</span>
-        <input type="text" value={form.title} onChange={update("title")} placeholder="idea name" />
+        <input type="text" value={form.title} onChange={update("title")} placeholder="Self-heating mug" />
       </label>
       <label>
         <span>link (optional)</span>
