@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 
 export const dynamic = "force-dynamic";
 
-// The Vercel/Upstash Redis integration was connected with a "STORAGE"
-// custom prefix, so the env vars come through as STORAGE_KV_REST_API_URL /
-// STORAGE_KV_REST_API_TOKEN instead of the default KV_REST_API_URL /
-// KV_REST_API_TOKEN. We build the client manually to point at those.
-const kv = createClient({
+// @vercel/kv is deprecated (Vercel KV as a product no longer exists), so
+// we talk to Upstash Redis directly via @upstash/redis instead.
+//
+// The Vercel Marketplace Redis integration on this project was connected
+// with a "STORAGE" custom prefix, so the env vars come through as
+// STORAGE_KV_REST_API_URL / STORAGE_KV_REST_API_TOKEN rather than the
+// SDK's default UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN names
+// (which is what Redis.fromEnv() looks for). We build the client manually
+// to point at the actual var names instead of using fromEnv().
+const kv = new Redis({
   url: process.env.STORAGE_KV_REST_API_URL!,
   token: process.env.STORAGE_KV_REST_API_TOKEN!,
 });
