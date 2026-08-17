@@ -10,7 +10,7 @@
   "dependencies": {
     "@react-three/drei": "^10.7.6",
     "@react-three/fiber": "^9.3.0",
-    "@upstash/redis": "^1.38.2",
+    "@supabase/supabase-js": "^2.112.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "gsap": "^3.13.0",
