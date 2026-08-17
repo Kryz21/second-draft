@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-// @vercel/kv is deprecated (Vercel KV as a product no longer exists), so
-// we talk to Upstash Redis directly via @upstash/redis instead.
-//
-// The Vercel Marketplace Redis integration on this project was connected
-// with a "STORAGE" custom prefix, so the env vars come through as
-// STORAGE_KV_REST_API_URL / STORAGE_KV_REST_API_TOKEN rather than the
-// SDK's default UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN names
-// (which is what Redis.fromEnv() looks for). We build the client manually
-// to point at the actual var names instead of using fromEnv().
-const kv = new Redis({
-  url: process.env.STORAGE_KV_REST_API_URL!,
-  token: process.env.STORAGE_KV_REST_API_TOKEN!,
-});
+// Server-side Supabase client. Uses the SERVICE ROLE key (not the anon
+// key) because this route reads/writes without a logged-in Supabase user
+// and needs to bypass Row Level Security. Never expose the service role
+// key to the browser — it only belongs in server env vars.
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const LIST_KEY = "second-draft:submissions";
+const supabase =
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { persistSession: false },
+      })
+    : null;
+
+const TABLE = "submissions";
 
 // Where Web3Forms should email a copy of every submission.
 // Get a free access key at https://web3forms.com (enter your email, key
@@ -40,6 +40,13 @@ type Submission = {
 };
 
 export async function POST(req: NextRequest) {
+  if (!supabase) {
+    return NextResponse.json(
+      { success: false, message: "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not configured on the server." },
+      { status: 500 }
+    );
+  }
+
   try {
     const body = await req.json();
     const { name, email, title, link, story } = body ?? {};
@@ -48,18 +55,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "Missing required fields." }, { status: 400 });
     }
 
-    const submission: Submission = {
-      id: crypto.randomUUID(),
+    const { error } = await supabase.from(TABLE).insert({
       name: String(name).trim(),
       email: String(email).trim(),
       title: String(title).trim(),
       link: link ? String(link).trim() : "",
       story: String(story).trim(),
-      createdAt: new Date().toISOString(),
-    };
+    });
 
-    // Save to Vercel KV so it shows up on /admin.
-    await kv.lpush(LIST_KEY, JSON.stringify(submission));
+    if (error) {
+      console.error("Supabase insert error:", error.message);
+      return NextResponse.json({ success: false, message: "Server error." }, { status: 500 });
+    }
 
     // Also email a copy via Web3Forms, if configured.
     if (WEB3FORMS_ACCESS_KEY) {
@@ -69,13 +76,13 @@ export async function POST(req: NextRequest) {
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
             access_key: WEB3FORMS_ACCESS_KEY,
-            subject: `Invention submission: ${submission.title}`,
+            subject: `Invention submission: ${title}`,
             from_name: "Second Draft — invention submissions",
-            name: submission.name,
-            email: submission.email,
-            invention: submission.title,
-            link: submission.link || "—",
-            story: submission.story,
+            name,
+            email,
+            invention: title,
+            link: link || "—",
+            story,
           }),
         });
       } catch {
@@ -103,16 +110,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, message: "Incorrect password." }, { status: 401 });
   }
 
-  const raw = await kv.lrange(LIST_KEY, 0, -1);
-  const submissions: Submission[] = raw
-    .map((item) => {
-      try {
-        return JSON.parse(item as string) as Submission;
-      } catch {
-        return null;
-      }
-    })
-    .filter((s): s is Submission => s !== null);
+  if (!supabase) {
+    return NextResponse.json(
+      { success: false, message: "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not configured on the server." },
+      { status: 500 }
+    );
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("id, name, email, title, link, story, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Supabase select error:", error.message);
+    return NextResponse.json({ success: false, message: "Server error." }, { status: 500 });
+  }
+
+  const submissions: Submission[] = (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    title: row.title,
+    link: row.link ?? "",
+    story: row.story,
+    createdAt: row.created_at,
+  }));
 
   return NextResponse.json({ success: true, submissions });
 }
