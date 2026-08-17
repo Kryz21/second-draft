@@ -1,73 +1,32 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment, Float, Line, PerspectiveCamera } from "@react-three/drei";
-import { useEffect, useRef, useState } from "react";
+import { Environment, Float, Line, PerspectiveCamera, useGLTF } from "@react-three/drei";
+import { Suspense, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 gsap.registerPlugin(ScrollTrigger);
 
+const MODEL_PATH = "/models/titan-drone.glb";
+
+// Named nodes inside the .glb we drive directly by name. These come from
+// the original Sketchfab rig's node names (checked against the file with
+// a glTF node dump) — if the model is ever re-exported from Blender with
+// different node names, these strings need to be updated to match.
+const NODE = {
+  leftWing: "front_l_2_11",
+  rightWing: "front_r_3_12",
+  cockpit: "drone_body_7_13",
+  rotorLeft: "rotor left_2",
+  rotorRight: "rotor right_4",
+  gunLeft: "gun left_0",
+  gunRight: "gun right_3",
+} as const;
+
 type PointerState = { x: number; y: number };
 type DragState = { active: boolean; lastX: number; lastY: number; targetX: number; targetY: number };
-
-function EnginePod({ side, repair, pulse }: { side: 1 | -1; repair: boolean; pulse: React.MutableRefObject<number> }) {
-  const g = useRef<THREE.Group>(null);
-  const glowMat = useRef<THREE.MeshStandardMaterial>(null);
-  useFrame((state) => {
-    if (!g.current) return;
-    g.current.rotation.z += .004 * side;
-    const s = 1 + Math.sin(state.clock.elapsedTime * 2.4 + side) * .018;
-    g.current.scale.set(s, s, s);
-    if (glowMat.current) glowMat.current.emissiveIntensity = (repair ? 5 : 1.2) + pulse.current * 6;
-  });
-  return (
-    <group ref={g} position={[side * 1.55, -.1, -.15]} rotation={[0, side * .08, side * .08]}>
-      <mesh rotation={[0, Math.PI / 2, 0]}>
-        <cylinderGeometry args={[.48, .58, 1.2, 32]} />
-        <meshStandardMaterial color="#292724" metalness={.95} roughness={.28} />
-      </mesh>
-      <mesh position={[side * .62, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <torusGeometry args={[.38, .055, 12, 36]} />
-        <meshStandardMaterial color="#8b8477" metalness={.9} roughness={.24} emissive={repair ? "#4d120f" : "#000000"} emissiveIntensity={repair ? 1.5 : 0} />
-      </mesh>
-      <mesh position={[side * .69, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <cylinderGeometry args={[.26, .26, .08, 32]} />
-        <meshStandardMaterial ref={glowMat} color="#ff3b35" emissive="#ff160f" emissiveIntensity={1.2} metalness={.2} roughness={.2} />
-      </mesh>
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} position={[side * .71, 0, 0]} rotation={[0, Math.PI / 2, i * Math.PI / 3]}>
-          <boxGeometry args={[.035, .68, .09]} />
-          <meshStandardMaterial color="#171614" metalness={.9} roughness={.3} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function Rotor({ repair, hovering }: { repair: boolean; hovering: React.MutableRefObject<boolean> }) {
-  const g = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (!g.current) return;
-    const speed = (repair ? 1.8 : .18) + (hovering.current ? .5 : 0);
-    g.current.rotation.z += delta * speed;
-  });
-  return (
-    <group ref={g} position={[0, -.03, 1.05]}>
-      <mesh>
-        <cylinderGeometry args={[.19, .19, .18, 24]} />
-        <meshStandardMaterial color="#777066" metalness={.9} roughness={.3} />
-      </mesh>
-      {[0, 1, 2, 3].map((i) => (
-        <mesh key={i} rotation={[0, 0, i * Math.PI / 2]} position={[0, .01, .03]}>
-          <boxGeometry args={[1.15, .055, .08]} />
-          <meshStandardMaterial color={i === 2 ? "#a13a35" : "#48443e"} metalness={.82} roughness={.35} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
 
 function FailedAircraft({
   progress,
@@ -80,17 +39,49 @@ function FailedAircraft({
   hovering: React.MutableRefObject<boolean>;
   pulse: React.MutableRefObject<number>;
 }) {
+  const { scene } = useGLTF(MODEL_PATH);
+
   const root = useRef<THREE.Group>(null);
   const userTilt = useRef<THREE.Group>(null);
-  const leftWing = useRef<THREE.Group>(null);
-  const rightWing = useRef<THREE.Group>(null);
-  const cockpit = useRef<THREE.Group>(null);
   const repairArmA = useRef<THREE.Group>(null);
   const repairArmB = useRef<THREE.Group>(null);
   const ring = useRef<THREE.Mesh>(null);
   const repairGlow = useRef<THREE.PointLight>(null);
-  const cockpitMat = useRef<THREE.MeshStandardMaterial>(null);
+  const engineLightL = useRef<THREE.PointLight>(null);
+  const engineLightR = useRef<THREE.PointLight>(null);
+
+  // Populated on mount by looking up named nodes inside the loaded model.
+  // Plain THREE.Object3D refs (not React refs) — gsap and useFrame can
+  // mutate .position / .rotation on these exactly like a React-managed ref.
+  const leftWing = useRef<THREE.Object3D | null>(null);
+  const rightWing = useRef<THREE.Object3D | null>(null);
+  const cockpit = useRef<THREE.Object3D | null>(null);
+  const rotorLeft = useRef<THREE.Object3D | null>(null);
+  const rotorRight = useRef<THREE.Object3D | null>(null);
+  const gunLeft = useRef<THREE.Object3D | null>(null);
+  const gunRight = useRef<THREE.Object3D | null>(null);
+
   const smoothDrag = useRef({ x: 0, y: 0 });
+  const tmpVec = useRef(new THREE.Vector3());
+
+  // Look up the named parts inside the model once it's loaded.
+  useEffect(() => {
+    leftWing.current = scene.getObjectByName(NODE.leftWing) ?? null;
+    rightWing.current = scene.getObjectByName(NODE.rightWing) ?? null;
+    cockpit.current = scene.getObjectByName(NODE.cockpit) ?? null;
+    rotorLeft.current = scene.getObjectByName(NODE.rotorLeft) ?? null;
+    rotorRight.current = scene.getObjectByName(NODE.rotorRight) ?? null;
+    gunLeft.current = scene.getObjectByName(NODE.gunLeft) ?? null;
+    gunRight.current = scene.getObjectByName(NODE.gunRight) ?? null;
+
+    if (process.env.NODE_ENV !== "production") {
+      (Object.keys(NODE) as (keyof typeof NODE)[]).forEach((key) => {
+        if (!scene.getObjectByName(NODE[key])) {
+          console.warn(`[Scene] Could not find node "${NODE[key]}" (${key}) in ${MODEL_PATH}.`);
+        }
+      });
+    }
+  }, [scene]);
 
   useEffect(() => {
     if (!root.current || !leftWing.current || !rightWing.current || !cockpit.current || !repairArmA.current || !repairArmB.current || !ring.current) return;
@@ -124,16 +115,37 @@ function FailedAircraft({
         .to(repairArmB.current!.position, { x: 3.4, y: 3.1, z: -1, ease: "none" }, .9);
     });
     return () => ctx.revert();
-  }, [progress]);
+  }, [progress, scene]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!root.current) return;
     const p = progress.current;
+    const repair = p > .45;
+
     root.current.position.y += Math.sin(state.clock.elapsedTime * .8) * .0007;
     if (ring.current) ring.current.rotation.z += .008 + p * .02 + (hovering.current ? .01 : 0);
     const glowPulse = 5 + p * 55 + Math.sin(state.clock.elapsedTime * 8) * 2 + pulse.current * 40;
     if (repairGlow.current) repairGlow.current.intensity = glowPulse;
-    if (cockpitMat.current) cockpitMat.current.opacity = .88;
+
+    // rotors spin faster once we're past the "repair" point in the story,
+    // and pick up extra speed while the visitor is hovering the model
+    const rotorSpeed = (repair ? 1.8 : .18) + (hovering.current ? .5 : 0);
+    if (rotorLeft.current) rotorLeft.current.rotation.z += delta * rotorSpeed;
+    if (rotorRight.current) rotorRight.current.rotation.z -= delta * rotorSpeed;
+
+    // stand-in "engine glow" lights tracking the gun mounts, same pulse
+    // behaviour the old procedural EnginePod glow rings had
+    const engineIntensity = (repair ? 5 : 1.2) + pulse.current * 6;
+    if (gunLeft.current && engineLightL.current) {
+      gunLeft.current.getWorldPosition(tmpVec.current);
+      engineLightL.current.position.copy(tmpVec.current);
+      engineLightL.current.intensity = engineIntensity * 3;
+    }
+    if (gunRight.current && engineLightR.current) {
+      gunRight.current.getWorldPosition(tmpVec.current);
+      engineLightR.current.position.copy(tmpVec.current);
+      engineLightR.current.intensity = engineIntensity * 3;
+    }
 
     // ease the user-drag rotation offset toward its target, and let it
     // relax back to center whenever the visitor isn't actively dragging
@@ -153,56 +165,9 @@ function FailedAircraft({
   return (
     <group ref={root} scale={1.02}>
       <group ref={userTilt}>
-        {/* central fuselage */}
-        <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-          <capsuleGeometry args={[.48, 2.25, 8, 24]} />
-          <meshStandardMaterial color="#35312c" metalness={.94} roughness={.29} />
-        </mesh>
-        <mesh position={[0, .16, .18]} scale={[.88, .62, .42]}>
-          <sphereGeometry args={[1, 32, 20]} />
-          <meshStandardMaterial color="#191817" metalness={.9} roughness={.22} />
-        </mesh>
-        {/* cockpit */}
-        <group ref={cockpit} position={[.18, .47, .16]}>
-          <mesh scale={[.72, .3, .55]}>
-            <sphereGeometry args={[1, 32, 16]} />
-            <meshStandardMaterial ref={cockpitMat} color="#152327" metalness={.62} roughness={.16} transparent opacity={.88} />
-          </mesh>
-          <mesh position={[0, -.18, .15]} scale={[.45, .05, .4]}>
-            <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial color="#ff3b35" emissive="#ff160f" emissiveIntensity={2.6} />
-          </mesh>
-        </group>
-        {/* broken wings */}
-        <group ref={leftWing} position={[-.25, .02, 0]}>
-          <mesh position={[-1.28, -.05, 0]} rotation={[0, .08, -.03]}>
-            <boxGeometry args={[2.45, .12, .78]} />
-            <meshStandardMaterial color="#4b4740" metalness={.9} roughness={.36} />
-          </mesh>
-          <mesh position={[-2.35, -.13, -.08]} rotation={[0, -.28, -.13]}>
-            <boxGeometry args={[.75, .09, .5]} />
-            <meshStandardMaterial color="#242220" metalness={.9} roughness={.4} />
-          </mesh>
-          <Line points={[[-.7, -.1, .42],[-1.7, -.2, .48],[-2.2, -.15, .3]]} color="#ff3934" lineWidth={1.3} />
-        </group>
-        <group ref={rightWing} position={[.25, .02, 0]}>
-          <mesh position={[1.28, -.02, 0]} rotation={[0, -.06, .02]}>
-            <boxGeometry args={[2.45, .12, .78]} />
-            <meshStandardMaterial color="#504b43" metalness={.9} roughness={.35} />
-          </mesh>
-          <mesh position={[2.28, -.1, .02]} rotation={[0, .18, .1]}>
-            <boxGeometry args={[.78, .1, .52]} />
-            <meshStandardMaterial color="#252320" metalness={.9} roughness={.4} />
-          </mesh>
-        </group>
-        <EnginePod side={-1} repair={progress.current > .45} pulse={pulse} />
-        <EnginePod side={1} repair={progress.current > .45} pulse={pulse} />
-        <Rotor repair={progress.current > .7} hovering={hovering} />
-        {/* landing skids */}
-        <Line points={[[-1.15,-.65,.25],[-.55,-.85,.2],[.55,-.85,.2],[1.15,-.65,.25]]} color="#777168" lineWidth={2} />
-        {/* cables */}
-        <Line points={[[-.2,-.45,.35],[-.65,-1.05,.6],[-1.2,-.8,.5]]} color="#b63c36" lineWidth={1.1} />
-        <Line points={[[.35,-.45,.3],[.9,-.98,.5],[1.5,-.65,.4]]} color="#77736b" lineWidth={.9} />
+        {/* scale/offset tuned to the model's own bounding box so it sits
+            centered where the old procedural fuselage used to sit */}
+        <primitive object={scene} scale={.42} position={[0, -.29, .56]} />
       </group>
       {/* repair gantry stays outside the drag-tilt group so it always reads as external scaffolding */}
       <group ref={repairArmA} position={[-3.2, 2.9, -.7]}>
@@ -220,6 +185,8 @@ function FailedAircraft({
         <meshStandardMaterial color="#ff3b35" emissive="#ff1c17" emissiveIntensity={2.5} transparent opacity={.65} />
       </mesh>
       <pointLight ref={repairGlow} position={[0, 0, 1]} color="#ff322e" intensity={8} distance={5} />
+      <pointLight ref={engineLightL} color="#ff3b35" intensity={4} distance={2.2} />
+      <pointLight ref={engineLightR} color="#ff3b35" intensity={4} distance={2.2} />
     </group>
   );
 }
@@ -326,7 +293,9 @@ export default function Scene() {
         <spotLight position={[-5, 7, 5]} intensity={105} angle={.38} penumbra={1} color="#ffe7cf" />
         <spotLight position={[5, 3, -3]} intensity={65} angle={.55} penumbra={1} color="#ff3430" />
         <pointLight position={[0, -2, 2]} intensity={18} distance={8} color="#ff413a" />
-        <FailedAircraft progress={progress} drag={drag} hovering={hovering} pulse={pulse} />
+        <Suspense fallback={null}>
+          <FailedAircraft progress={progress} drag={drag} hovering={hovering} pulse={pulse} />
+        </Suspense>
         <Float speed={.6} rotationIntensity={.08} floatIntensity={.12}>
           <mesh position={[-3.6, 2.4, -2]}>
             <icosahedronGeometry args={[.12, 1]} />
@@ -339,3 +308,5 @@ export default function Scene() {
     </div>
   );
 }
+
+useGLTF.preload(MODEL_PATH);
